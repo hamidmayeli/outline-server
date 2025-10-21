@@ -1037,6 +1037,144 @@ describe('ShadowsocksManagerService', () => {
     });
   });
 
+  describe('getDataUsage', () => {
+    it('Uses default 30-day timeframe when no hours parameter provided', async (done) => {
+      const mockMetrics = jasmine.createSpyObj<ManagerMetrics>('ManagerMetrics', [
+        'getOutboundByteTransfer',
+      ]);
+      const expectedResponse = {bytesTransferredByUserId: {key1: 1000, key2: 2000}};
+      mockMetrics.getOutboundByteTransfer.and.returnValue(Promise.resolve(expectedResponse));
+
+      const service = new ShadowsocksManagerServiceBuilder().managerMetrics(mockMetrics).build();
+
+      service.getDataUsage(
+        {params: {}, query: {}},
+        {
+          send: (httpCode, data) => {
+            expect(httpCode).toEqual(200);
+            expect(data).toEqual(expectedResponse);
+            // Expect default 30 days = 30 * 24 = 720 hours
+            expect(mockMetrics.getOutboundByteTransfer).toHaveBeenCalledWith({hours: 720});
+            responseProcessed = true;
+          },
+        },
+        done
+      );
+    });
+
+    it('Uses provided hours parameter correctly', async (done) => {
+      const mockMetrics = jasmine.createSpyObj<ManagerMetrics>('ManagerMetrics', [
+        'getOutboundByteTransfer',
+      ]);
+      const expectedResponse = {bytesTransferredByUserId: {key1: 1500}};
+      mockMetrics.getOutboundByteTransfer.and.returnValue(Promise.resolve(expectedResponse));
+
+      const service = new ShadowsocksManagerServiceBuilder().managerMetrics(mockMetrics).build();
+
+      service.getDataUsage(
+        {params: {}, query: {hours: '48'}}, // 48 hours = 2 days
+        {
+          send: (httpCode, data) => {
+            expect(httpCode).toEqual(200);
+            expect(data).toEqual(expectedResponse);
+            expect(mockMetrics.getOutboundByteTransfer).toHaveBeenCalledWith({hours: 48});
+            responseProcessed = true;
+          },
+        },
+        done
+      );
+    });
+
+    it('Handles number parameter correctly', async (done) => {
+      const mockMetrics = jasmine.createSpyObj<ManagerMetrics>('ManagerMetrics', [
+        'getOutboundByteTransfer',
+      ]);
+      const expectedResponse = {bytesTransferredByUserId: {key1: 3000}};
+      mockMetrics.getOutboundByteTransfer.and.returnValue(Promise.resolve(expectedResponse));
+
+      const service = new ShadowsocksManagerServiceBuilder().managerMetrics(mockMetrics).build();
+
+      service.getDataUsage(
+        {params: {}, query: {hours: 24}}, // 24 hours = 1 day
+        {
+          send: (httpCode, data) => {
+            expect(httpCode).toEqual(200);
+            expect(data).toEqual(expectedResponse);
+            expect(mockMetrics.getOutboundByteTransfer).toHaveBeenCalledWith({hours: 24});
+            responseProcessed = true;
+          },
+        },
+        done
+      );
+    });
+
+    it('Rejects negative hours parameter', async (done) => {
+      const service = new ShadowsocksManagerServiceBuilder().build();
+      const res = {send: SEND_NOTHING};
+
+      service.getDataUsage({params: {}, query: {hours: '-12'}}, res, (error) => {
+        expect(error.statusCode).toEqual(400);
+        expect(error.message).toContain('Parameter `hours` must be a positive number');
+        responseProcessed = true;
+        done();
+      });
+    });
+
+    it('Rejects zero hours parameter', async (done) => {
+      const service = new ShadowsocksManagerServiceBuilder().build();
+      const res = {send: SEND_NOTHING};
+
+      service.getDataUsage({params: {}, query: {hours: '0'}}, res, (error) => {
+        expect(error.statusCode).toEqual(400);
+        expect(error.message).toContain('Parameter `hours` must be a positive number');
+        responseProcessed = true;
+        done();
+      });
+    });
+
+    it('Rejects invalid string hours parameter', async (done) => {
+      const service = new ShadowsocksManagerServiceBuilder().build();
+      const res = {send: SEND_NOTHING};
+
+      service.getDataUsage({params: {}, query: {hours: 'invalid'}}, res, (error) => {
+        expect(error.statusCode).toEqual(400);
+        expect(error.message).toContain('Parameter `hours` must be a positive number');
+        responseProcessed = true;
+        done();
+      });
+    });
+
+    it('Rejects non-string non-number hours parameter', async (done) => {
+      const service = new ShadowsocksManagerServiceBuilder().build();
+      const res = {send: SEND_NOTHING};
+
+      service.getDataUsage({params: {}, query: {hours: {invalid: 'object'}}}, res, (error) => {
+        expect(error.statusCode).toEqual(400);
+        expect(error.message).toContain('Parameter `hours` must be a number');
+        responseProcessed = true;
+        done();
+      });
+    });
+
+    it('Handles manager metrics error properly', async (done) => {
+      const mockMetrics = jasmine.createSpyObj<ManagerMetrics>('ManagerMetrics', [
+        'getOutboundByteTransfer',
+      ]);
+      mockMetrics.getOutboundByteTransfer.and.returnValue(
+        Promise.reject(new Error('Prometheus error'))
+      );
+
+      const service = new ShadowsocksManagerServiceBuilder().managerMetrics(mockMetrics).build();
+      const res = {send: SEND_NOTHING};
+
+      service.getDataUsage({params: {}, query: {hours: '24'}}, res, (error) => {
+        expect(error.statusCode).toEqual(500);
+        responseProcessed = true;
+        done();
+      });
+    });
+  });
+
   describe('getShareMetrics', () => {
     it('Returns value from sharedMetrics', (done) => {
       const sharedMetrics = fakeSharedMetricsReporter();

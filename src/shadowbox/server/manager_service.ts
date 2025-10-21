@@ -616,8 +616,48 @@ export class ShadowsocksManagerService {
 
   async getDataUsage(req: RequestType, res: ResponseType, next: restify.Next) {
     try {
-      logging.debug(`getDataUsage request ${JSON.stringify(req.params)}`);
-      const response = await this.managerMetrics.getOutboundByteTransfer({hours: 30 * 24});
+      logging.debug(
+        `getDataUsage request ${JSON.stringify(req.params)} ${JSON.stringify(req.query)}`
+      );
+
+      // Default to 30 days (30 * 24 hours) for backward compatibility
+      const DEFAULT_HOURS = 30 * 24;
+
+      let hours = DEFAULT_HOURS;
+      if (req.query?.hours !== undefined) {
+        const hoursParam = req.query.hours;
+        if (typeof hoursParam === 'string') {
+          const parsed = parseFloat(hoursParam);
+          if (isNaN(parsed) || parsed <= 0) {
+            return next(
+              new restifyErrors.InvalidArgumentError(
+                {statusCode: 400},
+                'Parameter `hours` must be a positive number'
+              )
+            );
+          }
+          hours = parsed;
+        } else if (typeof hoursParam === 'number') {
+          if (hoursParam <= 0) {
+            return next(
+              new restifyErrors.InvalidArgumentError(
+                {statusCode: 400},
+                'Parameter `hours` must be a positive number'
+              )
+            );
+          }
+          hours = hoursParam;
+        } else {
+          return next(
+            new restifyErrors.InvalidArgumentError(
+              {statusCode: 400},
+              'Parameter `hours` must be a number'
+            )
+          );
+        }
+      }
+
+      const response = await this.managerMetrics.getOutboundByteTransfer({hours});
       res.send(HttpSuccess.OK, response);
       logging.debug(`getDataUsage response ${JSON.stringify(response)}`);
       return next();
