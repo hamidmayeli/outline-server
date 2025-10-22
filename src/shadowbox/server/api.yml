@@ -510,15 +510,15 @@ paths:
       tags:
         - Access Key
       parameters:
-        - name: hours
+        - name: last
           in: query
           required: false
-          description: Time duration in hours to retrieve data usage for (default is 720 hours = 30 days)
+          description: Time duration to retrieve data usage for (default is 30d = 30 days). Format is a number followed by a unit - h (hours), d (days), or w (weeks).
           schema:
-            type: number
-            minimum: 1
-            default: 720
-          example: 24
+            type: string
+            pattern: '^\d+[hdw]$'
+            default: '30d'
+          example: '2h'
       responses:
         '200':
           description: The data transferred by each access key

@@ -1038,7 +1038,7 @@ describe('ShadowsocksManagerService', () => {
   });
 
   describe('getDataUsage', () => {
-    it('Uses default 30-day timeframe when no hours parameter provided', async (done) => {
+    it('Uses default 30-day timeframe when no last parameter provided', async (done) => {
       const mockMetrics = jasmine.createSpyObj<ManagerMetrics>('ManagerMetrics', [
         'getOutboundByteTransfer',
       ]);
@@ -1062,7 +1062,7 @@ describe('ShadowsocksManagerService', () => {
       );
     });
 
-    it('Uses provided hours parameter correctly', async (done) => {
+    it('Uses provided last parameter correctly', async (done) => {
       const mockMetrics = jasmine.createSpyObj<ManagerMetrics>('ManagerMetrics', [
         'getOutboundByteTransfer',
       ]);
@@ -1072,7 +1072,7 @@ describe('ShadowsocksManagerService', () => {
       const service = new ShadowsocksManagerServiceBuilder().managerMetrics(mockMetrics).build();
 
       service.getDataUsage(
-        {params: {}, query: {hours: '48'}}, // 48 hours = 2 days
+        {params: {}, query: {last: '2d'}}, // 2 days = 48 hours
         {
           send: (httpCode, data) => {
             expect(httpCode).toEqual(200);
@@ -1085,7 +1085,7 @@ describe('ShadowsocksManagerService', () => {
       );
     });
 
-    it('Handles number parameter correctly', async (done) => {
+    it('Handles hours format correctly', async (done) => {
       const mockMetrics = jasmine.createSpyObj<ManagerMetrics>('ManagerMetrics', [
         'getOutboundByteTransfer',
       ]);
@@ -1095,7 +1095,7 @@ describe('ShadowsocksManagerService', () => {
       const service = new ShadowsocksManagerServiceBuilder().managerMetrics(mockMetrics).build();
 
       service.getDataUsage(
-        {params: {}, query: {hours: 24}}, // 24 hours = 1 day
+        {params: {}, query: {last: '24h'}}, // 24 hours
         {
           send: (httpCode, data) => {
             expect(httpCode).toEqual(200);
@@ -1108,49 +1108,84 @@ describe('ShadowsocksManagerService', () => {
       );
     });
 
-    it('Rejects negative hours parameter', async (done) => {
+    it('Rejects negative last parameter', async (done) => {
       const service = new ShadowsocksManagerServiceBuilder().build();
       const res = {send: SEND_NOTHING};
 
-      service.getDataUsage({params: {}, query: {hours: '-12'}}, res, (error) => {
+      service.getDataUsage({params: {}, query: {last: '-12h'}}, res, (error) => {
         expect(error.statusCode).toEqual(400);
-        expect(error.message).toContain('Parameter `hours` must be a positive number');
+        expect(error.message).toContain('Invalid time range');
         responseProcessed = true;
         done();
       });
     });
 
-    it('Rejects zero hours parameter', async (done) => {
+    it('Rejects zero last parameter', async (done) => {
       const service = new ShadowsocksManagerServiceBuilder().build();
       const res = {send: SEND_NOTHING};
 
-      service.getDataUsage({params: {}, query: {hours: '0'}}, res, (error) => {
+      service.getDataUsage({params: {}, query: {last: '0h'}}, res, (error) => {
         expect(error.statusCode).toEqual(400);
-        expect(error.message).toContain('Parameter `hours` must be a positive number');
+        expect(error.message).toContain('Invalid time range');
         responseProcessed = true;
         done();
       });
     });
 
-    it('Rejects invalid string hours parameter', async (done) => {
+    it('Rejects invalid string last parameter', async (done) => {
       const service = new ShadowsocksManagerServiceBuilder().build();
       const res = {send: SEND_NOTHING};
 
-      service.getDataUsage({params: {}, query: {hours: 'invalid'}}, res, (error) => {
+      service.getDataUsage({params: {}, query: {last: 'invalid'}}, res, (error) => {
         expect(error.statusCode).toEqual(400);
-        expect(error.message).toContain('Parameter `hours` must be a positive number');
+        expect(error.message).toContain('Invalid time range');
         responseProcessed = true;
         done();
       });
     });
 
-    it('Rejects non-string non-number hours parameter', async (done) => {
+    it('Rejects non-string last parameter', async (done) => {
       const service = new ShadowsocksManagerServiceBuilder().build();
       const res = {send: SEND_NOTHING};
 
-      service.getDataUsage({params: {}, query: {hours: {invalid: 'object'}}}, res, (error) => {
+      service.getDataUsage({params: {}, query: {last: {invalid: 'object'}}}, res, (error) => {
         expect(error.statusCode).toEqual(400);
-        expect(error.message).toContain('Parameter `hours` must be a number');
+        expect(error.message).toContain('Parameter `last` must be a string');
+        responseProcessed = true;
+        done();
+      });
+    });
+
+    it('Handles weeks format correctly', async (done) => {
+      const mockMetrics = jasmine.createSpyObj<ManagerMetrics>('ManagerMetrics', [
+        'getOutboundByteTransfer',
+      ]);
+      const expectedResponse = {bytesTransferredByUserId: {key1: 5000}};
+      mockMetrics.getOutboundByteTransfer.and.returnValue(Promise.resolve(expectedResponse));
+
+      const service = new ShadowsocksManagerServiceBuilder().managerMetrics(mockMetrics).build();
+
+      service.getDataUsage(
+        {params: {}, query: {last: '2w'}}, // 2 weeks = 14 days = 336 hours
+        {
+          send: (httpCode, data) => {
+            expect(httpCode).toEqual(200);
+            expect(data).toEqual(expectedResponse);
+            expect(mockMetrics.getOutboundByteTransfer).toHaveBeenCalledWith({hours: 336});
+            responseProcessed = true;
+          },
+        },
+        done
+      );
+    });
+
+    it('Rejects invalid time unit', async (done) => {
+      const service = new ShadowsocksManagerServiceBuilder().build();
+      const res = {send: SEND_NOTHING};
+
+      service.getDataUsage({params: {}, query: {last: '30s'}}, res, (error) => {
+        expect(error.statusCode).toEqual(400);
+        expect(error.message).toContain('Invalid time range');
         responseProcessed = true;
         done();
       });
@@ -1167,7 +1202,7 @@ describe('ShadowsocksManagerService', () => {
       const service = new ShadowsocksManagerServiceBuilder().managerMetrics(mockMetrics).build();
       const res = {send: SEND_NOTHING};
 
-      service.getDataUsage({params: {}, query: {hours: '24'}}, res, (error) => {
+      service.getDataUsage({params: {}, query: {last: '24h'}}, res, (error) => {
         expect(error.statusCode).toEqual(500);
         responseProcessed = true;
         done();
@@ -1349,6 +1384,11 @@ describe('convertTimeRangeToHours', () => {
     expect(() => convertTimeRangeToSeconds('30dd')).toThrow();
     expect(() => convertTimeRangeToSeconds('hi mom')).toThrow();
     expect(() => convertTimeRangeToSeconds('1j')).toThrow();
+  });
+
+  it('throws when zero or negative values are provided', () => {
+    expect(() => convertTimeRangeToSeconds('0h')).toThrow();
+    expect(() => convertTimeRangeToSeconds('-5d')).toThrow();
   });
 });
 
